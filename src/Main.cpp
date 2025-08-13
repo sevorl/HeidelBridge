@@ -14,6 +14,10 @@
 #include "Components/MQTT/MQTTManager.h"
 #include "Components/AsyncDelay/AsyncDelay.h"
 
+#ifdef RELAY_LOCK_ENABLED
+#include "Components/Relay/RelayManager.h"
+#endif
+
 IWallbox *gWallbox{nullptr};
 AsyncDelay gUptimeCounter(Constants::General::MillisPerSecond);
 AsyncDelay gMqttUpdater(Constants::MQTT::PublishIntervalMs);
@@ -56,14 +60,16 @@ void setup()
 #endif
   gWallbox->Init();
 
-  // Start Modbus TCP server
-  ModbusTCP::Init(gWallbox);
-
-  // Set up MQTT
-  if (Settings::Instance()->IsMqttEnabled)
+#ifdef RELAY_LOCK_ENABLED
+  // Initialize relay manager if enabled in settings
+  if (Settings::Instance()->IsRelayLockEnabled)
   {
-    MQTTManager::Init(gWallbox);
+    RelayManager::Init();
   }
+#endif
+
+  // Initialize MQTT manager
+  MQTTManager::Init(gWallbox);
 
   // Start async delays
   gUptimeCounter.Restart();

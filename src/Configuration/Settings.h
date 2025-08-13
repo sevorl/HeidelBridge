@@ -33,4 +33,7 @@ public:
     uint16_t MqttPort{1883};
     String MqttUser{};
     String MqttPassword{};
+#ifdef RELAY_LOCK_ENABLED
+    bool IsRelayLockEnabled{false};
+#endif
 };

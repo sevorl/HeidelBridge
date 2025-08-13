@@ -18,22 +18,23 @@ namespace Constants
 
     namespace HeidelbergWallbox
     {
-        constexpr float FailSafeCurrentA = 16.0f;
-        constexpr float CurrentFactor = 0.1f;
-        constexpr float VoltageFactor = 1.0f;
-        constexpr float TemperatureFactor = 0.1f;
+        constexpr uint32_t ModbusTimeoutMs = 2000;
+        constexpr uint32_t ModbusBaudrate = 19200;
         constexpr float InitialChargingCurrentLimitA = 16.0f;
-        constexpr uint8_t ModbusServerId = 1;
-        constexpr uint16_t ModbusBaudrate = 19200;
-        constexpr uint16_t ModbusTimeoutMs = 2000;
-        constexpr uint16_t WatchdogTimeoutS = 0;
-        constexpr bool AllowStandby = false;
+        constexpr float CurrentFactor = 0.1f;
+        constexpr float VoltageFactor = 1.0f;            // Add missing constant
+        constexpr float TemperatureFactor = 0.1f;        // Add missing constant
+        constexpr float FailSafeCurrentA = 16.0f;        // Add missing constant
+        constexpr bool AllowStandby = true;              // Add missing constant
+        constexpr uint16_t WatchdogTimeoutS = 60;        // Add missing constant
+        constexpr uint8_t ModbusServerId = 1;            // Add missing constant
     };
 
     namespace HeidelbergRegisters
     {
         constexpr uint16_t WatchdogTimeout = 257;
         constexpr uint16_t DisableStandby = 258;
+        constexpr uint16_t LockStatus = 259;        // Add lock status register
         constexpr uint16_t ChargingState = 5;
         constexpr uint16_t MaximalCurrent = 261;
         constexpr uint16_t Power = 14;
@@ -51,6 +52,7 @@ namespace Constants
         constexpr float MaxChargingCurrentA = 16.0f;
         constexpr float FailSafeCurrentA = 16.0f;
         constexpr float TemperatureDegCel = 23.4f;
+        constexpr float InitialChargingCurrentLimitA = 16.0f;
     };
 
     namespace DaheimladenRegisters
@@ -97,4 +99,12 @@ namespace Constants
     {
         constexpr uint16_t PublishIntervalMs = 500;
     };
+
+#ifdef RELAY_LOCK_ENABLED
+    namespace RelayLock
+    {
+        constexpr bool RelayActiveHigh = true;      // Relay is active when pin is HIGH
+        constexpr uint32_t DebounceMs = 100;        // Debounce time for relay state changes
+    };
+#endif
 };

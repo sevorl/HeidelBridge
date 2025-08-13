@@ -24,6 +24,10 @@ public:
     virtual bool GetChargingCurrents(float &c1A, float &c2A, float &c3A) override;
     virtual bool GetChargingVoltages(float &v1V, float &v2V, float &v3V) override;
     virtual bool IsChargingEnabled() override;
+
+#ifdef RELAY_LOCK_ENABLED
+    virtual bool GetLockStatus() override;
+#endif
 #pragma endregion IWallbox
 
 private:
@@ -31,5 +35,9 @@ private:
     float mFailsafeCurrentA{Constants::DummyWallbox::FailSafeCurrentA};
     float mEnergyMeterWh{0.0f};
     bool mChargingEnabled{true};
-    float mPreviousChargingCurrentLimitA{Constants::HeidelbergWallbox::InitialChargingCurrentLimitA};
+    float mPreviousChargingCurrentLimitA{Constants::DummyWallbox::InitialChargingCurrentLimitA};
+
+#ifdef RELAY_LOCK_ENABLED
+    bool mIsLocked{false};
+#endif
 };

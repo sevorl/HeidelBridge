@@ -127,3 +127,11 @@ float DummyWallbox::GetTemperature()
 {
     return Constants::DummyWallbox::TemperatureDegCel;
 }
+
+#ifdef RELAY_LOCK_ENABLED
+bool DummyWallbox::GetLockStatus()
+{
+    Logger::Debug("Dummy wallbox: returning lock status %d", mIsLocked);
+    return mIsLocked;
+}
+#endif

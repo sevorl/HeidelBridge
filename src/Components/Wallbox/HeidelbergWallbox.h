@@ -24,14 +24,22 @@ public:
     virtual bool GetChargingCurrents(float &c1A, float &c2A, float &c3A) override;
     virtual bool GetChargingVoltages(float &v1V, float &v2V, float &v3V) override;
     virtual bool IsChargingEnabled() override;
+
+#ifdef RELAY_LOCK_ENABLED
+    virtual bool GetLockStatus() override;
+#endif
 #pragma endregion IWallbox
 
 private:
-    VehicleState mState{VehicleState::Disconnected};
     float mChargingCurrentLimitA{Constants::HeidelbergWallbox::InitialChargingCurrentLimitA};
-    float mFailsafeCurrentA{0.0f};
-    float mLastPowerMeterValueW{0.0f};
-    float mLastEnergyMeterValueWh{0.0f};
     bool mChargingEnabled{true};
     float mPreviousChargingCurrentLimitA{Constants::HeidelbergWallbox::InitialChargingCurrentLimitA};
+    VehicleState mState{VehicleState::NotConnected};
+    float mLastEnergyMeterValueWh{0.0f};
+    float mFailsafeCurrentA{0.0f};
+    float mLastPowerMeterValueW{0.0f};
+
+#ifdef RELAY_LOCK_ENABLED
+    bool mIsLocked{false};
+#endif
 };

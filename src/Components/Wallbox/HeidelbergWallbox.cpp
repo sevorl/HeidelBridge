@@ -40,27 +40,30 @@ void HeidelbergWallbox::Init()
 
 VehicleState HeidelbergWallbox::GetState()
 {
-    uint16_t registerValue[1];
-    if (ModbusRTU::Instance()->ReadRegisters(Constants::HeidelbergRegisters::ChargingState, 1, 0x4, registerValue))
+    uint16_t registerValue[1] = {0};
+    if (ModbusRTU::Instance()->ReadRegisters(Constants::HeidelbergRegisters::ChargingState, 1, 3, registerValue))
     {
-        Logger::Debug("Heidelberg wallbox: Read state: %d", registerValue[0]);
-        if (registerValue[0] <= 3)
+        Logger::Trace("Heidelberg wallbox: vehicle state = %d", registerValue[0]);
+        switch (registerValue[0])
         {
-            mState = VehicleState::Disconnected;
-        }
-        else if (registerValue[0] <= 5)
-        {
+        case 2:
+            mState = VehicleState::NotConnected;  // Changed from Disconnected
+            break;
+        case 3:
             mState = VehicleState::Connected;
-        }
-        else if (registerValue[0] <= 7)
-        {
+            break;
+        case 4:
             mState = VehicleState::Charging;
+            break;
+        default:
+            mState = VehicleState::Unknown;
+            break;
         }
     }
     else
     {
-        // Error reading modbus register
-        Logger::Error("Heidelberg wallbox: ERROR: Could not read plugged state");
+        Logger::Warning("Heidelberg wallbox: failed to read vehicle state");
+        mState = VehicleState::Unknown;
     }
 
     return mState;
@@ -107,8 +110,8 @@ bool HeidelbergWallbox::SetChargingEnabled(bool chargingEnabled)
 
         // Disable charging
         mPreviousChargingCurrentLimitA = mChargingCurrentLimitA;
-        ok = SetChargingCurrentLimit(0.0f);
         mChargingEnabled = false;
+        ok = SetChargingCurrentLimit(0.0f);
     }
 
     return ok;
@@ -253,3 +256,21 @@ float HeidelbergWallbox::GetTemperature()
         return 0.0f;
     }
 }
+
+#ifdef RELAY_LOCK_ENABLED
+bool HeidelbergWallbox::GetLockStatus()
+{
+    uint16_t lockValue = 0;
+    if (ModbusRTU::Instance()->ReadRegisters(Constants::HeidelbergRegisters::LockStatus, 1, 3, &lockValue))
+    {
+        mIsLocked = (lockValue != 0);
+        Logger::Trace("Heidelberg wallbox: lock status = %d (raw: %d)", mIsLocked, lockValue);
+        return mIsLocked;
+    }
+    else
+    {
+        Logger::Warning("Heidelberg wallbox: failed to read lock status");
+        return mIsLocked; // Return last known state
+    }
+}
+#endif

@@ -16,6 +16,10 @@ extern "C"
 #include "../../Utils/StringUtils.h"
 #include "MQTTManager.h"
 
+#ifdef RELAY_LOCK_ENABLED
+#include "../Relay/RelayManager.h"
+#endif
+
 namespace MQTTManager
 {
     AsyncMqttClient gMqttClient;
@@ -27,7 +31,13 @@ namespace MQTTManager
     char PayloadBuffer[512];
     PrefixedString gMqttTopic(128);
 
-    constexpr uint16_t NumMqttPublishedValues = 10;
+    constexpr uint16_t NumMqttPublishedValues = 
+#ifdef RELAY_LOCK_ENABLED
+        11;
+#else
+        10;
+#endif
+
     enum MqttPublishedValues
     {
         VehicleState,
@@ -40,6 +50,9 @@ namespace MQTTManager
         Temperature,
         Internals,
         Discovery
+#ifdef RELAY_LOCK_ENABLED
+        ,LockStatus
+#endif
     };
 
     // Connects to the MQTT broker if not already connected
@@ -108,6 +121,47 @@ namespace MQTTManager
         PublishHomeAssistantDiscoveryTopic(
             "homeassistant/number/%/charging_current_limit/config",
             R"({"name": "Charging Current Limit", "command_topic": "%/control/charging_current_limit", "state_topic": "%/status/charging_current_limit", "min": 6, "max": 16, "step": 1, "unit_of_measurement": "A", "uniq_id": "heidelbridge_charging_current_limit", "device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})");
+
+#ifdef RELAY_LOCK_ENABLED
+        // Only ADD these new discovery messages for relay lock
+        PublishHomeAssistantDiscoveryTopic(
+            "homeassistant/switch/%/lock_wallbox/config",
+            R"({
+                "name": "Lock Wallbox",
+                "state_topic": "%/lock_wallbox",
+                "command_topic": "%/control/lock_wallbox",
+                "unique_id": "%_lock_wallbox_switch",
+                "object_id": "lock_wallbox",
+                "payload_on": "ON",
+                "payload_off": "OFF",
+                "icon": "mdi:lock",
+                "device": {
+                    "identifiers": ["%"],
+                    "name": "%",
+                    "model": "EnergyControl",
+                    "manufacturer": "Heidelberg"
+                }
+            })");
+
+        PublishHomeAssistantDiscoveryTopic(
+            "homeassistant/binary_sensor/%/is_locked/config",
+            R"({
+                "name": "Wallbox Locked",
+                "device_class": "lock",
+                "state_topic": "%/is_locked",
+                "payload_on": "1",
+                "payload_off": "0",
+                "unique_id": "%_is_locked_sensor",
+                "object_id": "is_locked",
+                "icon": "mdi:lock-check",
+                "device": {
+                    "identifiers": ["%"],
+                    "name": "%",
+                    "model": "EnergyControl",
+                    "manufacturer": "Heidelberg"
+                }
+            })");
+#endif
     }
 
     // Publishes various MQTT status messages based on the current value index.
@@ -123,53 +177,61 @@ namespace MQTTManager
             case (MqttPublishedValues::VehicleState):
                 switch (gWallbox->GetState())
                 {
-                case (VehicleState::Disconnected):
-                    gMqttClient.publish(gMqttTopic.SetString("/is_vehicle_connected"), 0, false, "0");
-                    gMqttClient.publish(gMqttTopic.SetString("/is_vehicle_charging"), 0, false, "0");
+                case (VehicleState::NotConnected):
                     gMqttClient.publish(gMqttTopic.SetString("/vehicle_state"), 0, false, "disconnected");
                     break;
                 case (VehicleState::Connected):
-                    gMqttClient.publish(gMqttTopic.SetString("/is_vehicle_connected"), 0, false, "1");
-                    gMqttClient.publish(gMqttTopic.SetString("/is_vehicle_charging"), 0, false, "0");
                     gMqttClient.publish(gMqttTopic.SetString("/vehicle_state"), 0, false, "connected");
                     break;
                 case (VehicleState::Charging):
-                    gMqttClient.publish(gMqttTopic.SetString("/is_vehicle_connected"), 0, false, "1");
-                    gMqttClient.publish(gMqttTopic.SetString("/is_vehicle_charging"), 0, false, "1");
                     gMqttClient.publish(gMqttTopic.SetString("/vehicle_state"), 0, false, "charging");
+                    break;
+                default:
+                    gMqttClient.publish(gMqttTopic.SetString("/vehicle_state"), 0, false, "unknown");
                     break;
                 }
                 break;
+
             case (MqttPublishedValues::ChargingCurrentLimit):
                 gMqttClient.publish(gMqttTopic.SetString("/charging_current_limit"), 0, false, String(gWallbox->GetChargingCurrentLimit()).c_str());
                 break;
+
             case (MqttPublishedValues::ChargingPower):
                 gMqttClient.publish(gMqttTopic.SetString("/charging_power"), 0, false, String(gWallbox->GetChargingPower()).c_str());
                 break;
+
             case (MqttPublishedValues::FailsafeCurrent):
                 gMqttClient.publish(gMqttTopic.SetString("/failsafe_current"), 0, false, String(gWallbox->GetFailsafeCurrent()).c_str());
                 break;
+
             case (MqttPublishedValues::EnergyMeter):
-                gMqttClient.publish(gMqttTopic.SetString("/energy_meter"), 0, false, String(gWallbox->GetEnergyMeterValue() * Constants::General::FactorWhToKWh).c_str());
+                gMqttClient.publish(gMqttTopic.SetString("/energy_meter"), 0, false, String(gWallbox->GetEnergyMeterValue()).c_str());
                 break;
+
             case (MqttPublishedValues::ChargingCurrent):
-                float c1, c2, c3;
-                if (gWallbox->GetChargingCurrents(c1, c2, c3))
                 {
-                    gMqttClient.publish(gMqttTopic.SetString("/charging_current/phase1"), 0, false, String(c1).c_str());
-                    gMqttClient.publish(gMqttTopic.SetString("/charging_current/phase2"), 0, false, String(c2).c_str());
-                    gMqttClient.publish(gMqttTopic.SetString("/charging_current/phase3"), 0, false, String(c3).c_str());
+                    float c1, c2, c3;
+                    if (gWallbox->GetChargingCurrents(c1, c2, c3))
+                    {
+                        gMqttClient.publish(gMqttTopic.SetString("/charging_current/phase1"), 0, false, String(c1).c_str());
+                        gMqttClient.publish(gMqttTopic.SetString("/charging_current/phase2"), 0, false, String(c2).c_str());
+                        gMqttClient.publish(gMqttTopic.SetString("/charging_current/phase3"), 0, false, String(c3).c_str());
+                    }
                 }
                 break;
+
             case (MqttPublishedValues::ChargingVoltage):
-                float v1, v2, v3;
-                if (gWallbox->GetChargingVoltages(v1, v2, v3))
                 {
-                    gMqttClient.publish(gMqttTopic.SetString("/charging_voltage/phase1"), 0, false, String(v1).c_str());
-                    gMqttClient.publish(gMqttTopic.SetString("/charging_voltage/phase2"), 0, false, String(v2).c_str());
-                    gMqttClient.publish(gMqttTopic.SetString("/charging_voltage/phase3"), 0, false, String(v3).c_str());
+                    float v1, v2, v3;
+                    if (gWallbox->GetChargingVoltages(v1, v2, v3))
+                    {
+                        gMqttClient.publish(gMqttTopic.SetString("/charging_voltage/phase1"), 0, false, String(v1).c_str());
+                        gMqttClient.publish(gMqttTopic.SetString("/charging_voltage/phase2"), 0, false, String(v2).c_str());
+                        gMqttClient.publish(gMqttTopic.SetString("/charging_voltage/phase3"), 0, false, String(v3).c_str());
+                    }
                 }
                 break;
+                
             case (MqttPublishedValues::Temperature):
                 gMqttClient.publish(gMqttTopic.SetString("/temperature"), 0, false, String(gWallbox->GetTemperature()).c_str());
                 break;
@@ -184,6 +246,15 @@ namespace MQTTManager
             case (MqttPublishedValues::Discovery):
                 PublishHomeAssistantDiscovery();
                 break;
+
+#ifdef RELAY_LOCK_ENABLED
+            case (MqttPublishedValues::LockStatus):
+                {
+                    bool isLocked = gWallbox->GetLockStatus();
+                    gMqttClient.publish(gMqttTopic.SetString("/is_locked"), 0, false, isLocked ? "1" : "0");
+                }
+                break;
+#endif
             }
 
             // Increment the current value index and wrap around if it exceeds the number of published values
@@ -194,6 +265,11 @@ namespace MQTTManager
 
             gMqttClient.publish(gMqttTopic.SetString("/enable_charging"), 0, true,
                                 gWallbox->IsChargingEnabled() ? "ON" : "OFF");
+#ifdef RELAY_LOCK_ENABLED
+            // Only ADD this new relay lock state publishing
+            gMqttClient.publish(gMqttTopic.SetString("/lock_wallbox"), 0, true,
+                RelayManager::IsLocked() ? "ON" : "OFF");
+#endif
         }
     }
 
@@ -205,6 +281,10 @@ namespace MQTTManager
         // Subscribe to control topics
         gMqttClient.subscribe(gMqttTopic.SetString("/control/charging_current_limit"), 2);
         gMqttClient.subscribe(gMqttTopic.SetString("/control/enable_charging"), 2);
+#ifdef RELAY_LOCK_ENABLED
+        // Only ADD this new subscription
+        gMqttClient.subscribe(gMqttTopic.SetString("/control/lock_wallbox"), 2);
+#endif
 
         // Publish version information
         String versionString = String(Version::Major) + "." + String(Version::Minor) + "." + String(Version::Patch);
@@ -240,6 +320,17 @@ namespace MQTTManager
             bool enableCharging = cmd.equalsIgnoreCase("ON");
             gWallbox->SetChargingEnabled(enableCharging);
         }
+#ifdef RELAY_LOCK_ENABLED
+        // Only ADD this new message handler
+        else if (strcmp(gMqttTopic.SetString("/control/lock_wallbox"), topic) == 0)
+        {
+            String cmd(payload, len);
+            cmd.trim();
+            Logger::Trace("Received MQTT control command: lock_wallbox = %s", cmd.c_str());
+            bool lockWallbox = cmd.equalsIgnoreCase("ON");
+            RelayManager::SetLocked(lockWallbox);
+        }
+#endif
     }
 
     // Callback for MQTT publish
