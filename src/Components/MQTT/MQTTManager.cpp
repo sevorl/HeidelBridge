@@ -108,60 +108,29 @@ namespace MQTTManager
 
         PublishHomeAssistantDiscoveryTopic(
             "homeassistant/switch/%/enable_charging/config",
-            R"({
-                "name": "Enable Charging",
-                "state_topic": "%/enable_charging",
-                "command_topic": "%/control/enable_charging",
-                "unique_id": "%_enable_charging_switch",
-                "object_id": "enable_charging",
-                "payload_on": "ON",
-                "payload_off": "OFF",
-                 "device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})");
+            R"({"name":"Enable Charging","state_topic":"%/enable_charging","command_topic":"%/control/enable_charging","unique_id":"%_enable_charging_switch","object_id":"enable_charging","payload_on":"ON","payload_off":"OFF","device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})");
 
         PublishHomeAssistantDiscoveryTopic(
             "homeassistant/number/%/charging_current_limit/config",
             R"({"name": "Charging Current Limit", "command_topic": "%/control/charging_current_limit", "state_topic": "%/status/charging_current_limit", "min": 6, "max": 16, "step": 1, "unit_of_measurement": "A", "uniq_id": "heidelbridge_charging_current_limit", "device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})");
 
-#ifdef RELAY_LOCK_ENABLED
+    #ifdef RELAY_LOCK_ENABLED
         // Only ADD these new discovery messages for relay lock
+        // 1. Controllable relay lock switch (uses RelayManager state)
         PublishHomeAssistantDiscoveryTopic(
             "homeassistant/switch/%/lock_wallbox/config",
-            R"({
-                "name": "Lock Wallbox",
-                "state_topic": "%/lock_wallbox",
-                "command_topic": "%/control/lock_wallbox",
-                "unique_id": "%_lock_wallbox_switch",
-                "object_id": "lock_wallbox",
-                "payload_on": "ON",
-                "payload_off": "OFF",
-                "icon": "mdi:lock",
-                "device": {
-                    "identifiers": ["%"],
-                    "name": "%",
-                    "model": "EnergyControl",
-                    "manufacturer": "Heidelberg"
-                }
-            })");
+            R"json({"name":"Lock Wallbox","state_topic":"%/lock_wallbox","command_topic":"%/control/lock_wallbox","unique_id":"%_lock_wallbox_switch","object_id":"lock_wallbox","payload_on":"ON","payload_off":"OFF","icon":"mdi:lock","device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})json");
 
+        // 2. Relay lock status sensor (shows actual relay state)
         PublishHomeAssistantDiscoveryTopic(
             "homeassistant/binary_sensor/%/is_locked/config",
-            R"({
-                "name": "Wallbox Locked",
-                "device_class": "lock",
-                "state_topic": "%/is_locked",
-                "payload_on": "1",
-                "payload_off": "0",
-                "unique_id": "%_is_locked_sensor",
-                "object_id": "is_locked",
-                "icon": "mdi:lock-check",
-                "device": {
-                    "identifiers": ["%"],
-                    "name": "%",
-                    "model": "EnergyControl",
-                    "manufacturer": "Heidelberg"
-                }
-            })");
-#endif
+            R"json({"name":"Relay Lock Status","device_class":"lock","state_topic":"%/is_locked","payload_on":"1","payload_off":"0","unique_id":"%_relay_lock_status","object_id":"relay_lock_status","icon":"mdi:lock-check","entity_category":"diagnostic","device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})json");
+
+        // 3. Modbus lock status sensor (read-only from wallbox)
+        PublishHomeAssistantDiscoveryTopic(
+            "homeassistant/binary_sensor/%/modbus_lock_status/config",
+            R"json({"name":"Wallbox Lock Status (Modbus)","device_class":"lock","state_topic":"%/modbus_lock_status","payload_on":"1","payload_off":"0","unique_id":"%_modbus_lock_status","object_id":"modbus_lock_status","icon":"mdi:lock-outline","entity_category":"diagnostic","device":{"identifiers":["%"],"name":"%","model":"EnergyControl","manufacturer":"Heidelberg"}})json");
+    #endif
     }
 
     // Publishes various MQTT status messages based on the current value index.
@@ -250,8 +219,15 @@ namespace MQTTManager
 #ifdef RELAY_LOCK_ENABLED
             case (MqttPublishedValues::LockStatus):
                 {
-                    bool isLocked = gWallbox->GetLockStatus();
-                    gMqttClient.publish(gMqttTopic.SetString("/is_locked"), 0, false, isLocked ? "1" : "0");
+                    // Publish BOTH Modbus lock status (read-only) and Relay state (controllable)
+                    
+                    // 1. Modbus lock status from wallbox (information only)
+                    bool modbusLocked = gWallbox->GetLockStatus();
+                    gMqttClient.publish(gMqttTopic.SetString("/modbus_lock_status"), 0, false, modbusLocked ? "1" : "0");
+                    
+                    // 2. Relay manager state (matches the controllable switch)
+                    bool relayLocked = RelayManager::IsLocked();
+                    gMqttClient.publish(gMqttTopic.SetString("/is_locked"), 0, false, relayLocked ? "1" : "0");
                 }
                 break;
 #endif

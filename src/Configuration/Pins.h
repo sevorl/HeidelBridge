@@ -25,9 +25,9 @@ namespace Pins
     constexpr uint8_t PinTX = GPIO_NUM_19;
     constexpr uint8_t PinRTS = GPIO_NUM_21;
 
-#ifdef RELAY_LOCK_ENABLED
-    // GPIO4 available for relay control on standard ESP32
-    constexpr uint8_t PinRelayLock = GPIO_NUM_4;
+#ifdef RELAY_LOCK_ENABLED and LILYGO_BOARD
+    // GPIO34 available for relay control on standard ESP32
+    constexpr uint8_t PinRelayLock = GPIO_NUM_34;
 #endif
 
 #endif
